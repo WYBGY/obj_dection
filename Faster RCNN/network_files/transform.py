@@ -50,7 +50,7 @@ def resize_boxes(boxes, origin_size, new_size):
               for s, s_origin in zip(new_size, origin_size)]
 
     ratios_height, ratios_width = ratios
-
+    # unbind: 解绑操作,相当于xmin = boxes[:, 0], ymin = boxes[:, 1], ....
     xmin, ymin, xmax, ymax = boxes.unbind(1)
     xmin = xmin * ratios_width
     xmax = xmax * ratios_width
@@ -178,7 +178,15 @@ class GeneralizedRCNNTransform(nn.Module):
         Returns:
 
         """
-        pass
+        if self.training:
+            return result
+
+        for i, (pred, im_s, o_im_s) in enumerate(zip(result, image_shapes, original_image_sizes)):
+            boxes = pred["boxes"]
+            boxes = resize_boxes(boxes, im_s, o_im_s)
+            result[i]['boxes'] = boxes
+
+        return result
 
     # 开始处理
     def forward(self,
@@ -214,7 +222,7 @@ class GeneralizedRCNNTransform(nn.Module):
         以便在 JIT 编译和优化的过程中提供更多的信息，从而提高性能和准确性。
         """
         image_sizes_list = torch.jit.annotate(List[Tuple[int, int]], [])
-        for  image_size in image_sizes:
+        for image_size in image_sizes:
             assert len(image_size) == 2
             image_sizes_list.append((image_size[0], image_size[1]))
 

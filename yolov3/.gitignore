@@ -1,0 +1,6 @@
+*.zip
+*.pt
+./my_yolo_dataset/train/images/*
+./my_yolo_dataset/val/images/*
+./VOCtrainval_11-May-2012/*
+./runs/*

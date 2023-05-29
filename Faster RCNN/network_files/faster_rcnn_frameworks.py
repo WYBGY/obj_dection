@@ -7,9 +7,9 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from torchvision.ops import MultiScaleRoIAlign
 
-from .roi_head import RoIHeads
+from .roi_head import RoiHeads
 from .transform import GeneralizedRCNNTransform
-from .rpn_funtion import AnchorGenerator, RPNHead, RegionProposalNetwork
+from .rpn_function import AnchorsGenerator, RPNHead, RegionProposalNetwork
 
 
 class FasterRCNNBase(nn.Module):
@@ -71,47 +71,47 @@ class FasterRCNNBase(nn.Module):
                     raise ValueError("Expected target boxes to be of type "
                                      "Tensor, got {:}.".format(type(boxes)))
 
-            # 这行代码使用了 torch.jit.annotate() 函数，它的作用是给输入的变量显式地标注类型信息，以便在 JIT 编译过程中更好地进行优化
-            original_image_sizes = torch.jit.annotate(List[Tuple[int, int]], [])
-            # 将每一张img的height和width存起来
-            for img in images:
-                val = img.shape[-2:]
-                assert len(val) == 2
-                original_image_sizes.append(val[0], val[1])
-            # 对images和targets进行转换，后面再说
-            images, targets = self.transform(images, targets)
-            # images输入backbone，得到特征图
-            features = self.backbone(images.tensors)
-            # 将所得到的特征图层放进字典中，如果只有1层则编号为"0",若有多层则为"0","1","2","3",.....
-            if isinstance(features, torch.Tensor):
-                features = OrderedDict([('0', features)])
-            # 将images，targets还有特征图输入到rpn网络中
-            # proposals: List[Tensor], Tensor_shape: [num_proposals, 4],
-            # 每个proposals是绝对坐标，且为(x1, y1, x2, y2)格式
-            proposals, proposal_losses = self.rpn(images, features, targets)
-            # 将特征图、建议框、图片尺寸(transform之后的尺寸)、labels输入到roi—head网络，也就是最终的分类和回归网络中
-            detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
-            # 网络的最后一部分，因为图片和预测框都是在resize的基础上进行的，因此要进行还原
-            detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
+        # 这行代码使用了 torch.jit.annotate() 函数，它的作用是给输入的变量显式地标注类型信息，以便在 JIT 编译过程中更好地进行优化
+        original_image_sizes = torch.jit.annotate(List[Tuple[int, int]], [])
+        # 将每一张img的height和width存起来
+        for img in images:
+            val = img.shape[-2:]
+            assert len(val) == 2
+            original_image_sizes.append((val[0], val[1]))
+        # 对images和targets进行转换，后面再说
+        images, targets = self.transform(images, targets)
+        # images输入backbone，得到特征图
+        features = self.backbone(images.tensors)
+        # 将所得到的特征图层放进字典中，如果只有1层则编号为"0",若有多层则为"0","1","2","3",.....
+        if isinstance(features, torch.Tensor):
+            features = OrderedDict([('0', features)])
+        # 将images，targets还有特征图输入到rpn网络中
+        # proposals: List[Tensor], Tensor_shape: [num_proposals, 4],
+        # 每个proposals是绝对坐标，且为(x1, y1, x2, y2)格式
+        proposals, proposal_losses = self.rpn(images, features, targets)
+        # 将特征图、建议框、图片尺寸(transform之后的尺寸)、labels输入到roi—head网络，也就是最终的分类和回归网络中
+        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
+        # 网络的最后一部分，因为图片和预测框都是在resize的基础上进行的，因此要进行还原
+        detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
 
-            losses = {}
-            losses.update(detector_losses)
-            losses.update(proposal_losses)
+        losses = {}
+        losses.update(detector_losses)
+        losses.update(proposal_losses)
 
-            """
-            在下面这个代码段中，根据是否处于 Torch Script 模式下，使用不同的返回方式：
+        """
+        在下面这个代码段中，根据是否处于 Torch Script 模式下，使用不同的返回方式：
 
-                如果处于 Torch Script 模式下，则返回损失（losses）和检测（detections）的元组；
-                如果不处于 Torch Script 模式下，则调用 eager_outputs 方法进行返回。
-            其中，eager_outputs 方法也是 Faster R-CNN 模型的一个方法，其作用是对损失和检测进行整合和包装，以便于输出和可读性。
-            """
-            if torch.jit.is_scripting():
-                if not self._has_warned:
-                    warnings.warn("RCNN always returns a (Losses, Detections) tuple in scripting")
-                    self._has_warned = True
-                return losses, detections
-            else:
-                return self.eager_outputs(losses, detections)
+            如果处于 Torch Script 模式下，则返回损失（losses）和检测（detections）的元组；
+            如果不处于 Torch Script 模式下，则调用 eager_outputs 方法进行返回。
+        其中，eager_outputs 方法也是 Faster R-CNN 模型的一个方法，其作用是对损失和检测进行整合和包装，以便于输出和可读性。
+        """
+        if torch.jit.is_scripting():
+            if not self._has_warned:
+                warnings.warn("RCNN always returns a (Losses, Detections) tuple in scripting")
+                self._has_warned = True
+            return losses, detections
+        else:
+            return self.eager_outputs(losses, detections)
 
 
 class TwoMLPHead(nn.Module):
@@ -141,7 +141,7 @@ class FasterRCNNPredictor(nn.Module):
         in_channels: 经两个全连接层后输出的channel个数
         num_classes: 包括背景在内的类别的数量
     """
-    
+
     def __init__(self, in_channels, num_classes):
         super(FasterRCNNPredictor, self).__init__()
         self.cls_score = nn.Linear(in_channels, num_classes)
@@ -238,7 +238,7 @@ class FasterRCNN(FasterRCNNBase):
             raise ValueError("backone should contain an attribute out_channels specifying the number of "
                              "output channels (assume to be the same for all the levels")
         # rpn_anchor_generator要么是一个实例化的AnchorGenerator对象，要么是None
-        assert isinstance(rpn_anchor_generator, (AnchorGenerator, type(None)))
+        assert isinstance(rpn_anchor_generator, (AnchorsGenerator, type(None)))
         # box_roi_pool要么是声明过的对象，要么是None
         assert isinstance(box_roi_pool, (MultiScaleRoIAlign, type(None)))
         # 在回归阶段，num_classes必须为None，在分类阶段，num_classes不能为None
@@ -258,14 +258,14 @@ class FasterRCNN(FasterRCNNBase):
         if rpn_anchor_generator is None:
             anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
             aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
-            rpn_anchor_generator = AnchorGenerator(anchor_sizes, aspect_ratios)
+            rpn_anchor_generator = AnchorsGenerator(anchor_sizes, aspect_ratios)
 
         # 生成RPN通过滑动窗口预测网络部分
         if rpn_head is None:
             rpn_head = RPNHead(
                 out_channels, rpn_anchor_generator.num_anchors_per_location()[0])
 
-        # 将保留框参数放在字典里
+        # 将保留框数量的参数放在字典里
         rpn_pre_nms_top_n = dict(training=rpn_pre_nms_top_n_train, testing=rpn_pre_nms_top_n_test)
         rpn_post_nms_top_n = dict(training=rpn_post_nms_top_n_train, testing=rpn_post_nms_top_n_test)
 
@@ -293,7 +293,7 @@ class FasterRCNN(FasterRCNNBase):
             box_predictor = FasterRCNNPredictor(representation_size, num_classes)
 
         # 上面是对每一块定义了一个实例化对象，结合在一起，输入到ROI—Head中，也就是网络的最后一整块
-        roi_heads = RoIHeads(
+        roi_heads = RoiHeads(
             # box
             box_roi_pool, box_head, box_predictor,
             box_fg_iou_threshold, box_bg_iou_threshold, # 0.5, 0.5

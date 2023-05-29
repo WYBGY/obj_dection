@@ -42,6 +42,6 @@ class RandomHorizontalFlip(object):
             bbox = target['boxes']
             # 对box进行翻转，水平翻转对于y轴(第1维ymin, 第3维ymax)没有影响
             # 用宽度减去原来的水平坐标，就是翻转后的坐标
-            bbox[:, [0, 2]] = width - bbox[:, [0, 2]]
+            bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
             target['boxes'] = bbox
         return image, target
